@@ -17,7 +17,7 @@ use orca_whirlpools_client::{SwapCpiBuilder};
 declare_id!("HMdpAniwacxAdqJiSnjvTXNRyG5VHc8rzGKy2afyyT8C");
 
 #[program]
-pub mod swipedotfun {
+pub mod coinswipedotsol {
     use super::*;
 
     const ADMIN_WALLET: Pubkey = pubkey!("AYoMJBzbH4yiw4YU3WrojnKUStecXZ2pYgwQi5rytech");

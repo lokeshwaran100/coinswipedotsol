@@ -1,1 +1,1 @@
-# swipedotfun
+# coinswipedotsol

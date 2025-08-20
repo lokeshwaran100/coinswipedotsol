@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-swipedotfun = "HMdpAniwacxAdqJiSnjvTXNRyG5VHc8rzGKy2afyyT8C"
+coinswipedotsol = "HMdpAniwacxAdqJiSnjvTXNRyG5VHc8rzGKy2afyyT8C"
 
 [registry]
 url = "https://api.apr.dev"
