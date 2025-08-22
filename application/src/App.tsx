@@ -6,6 +6,8 @@ import Layout from './components/Layout';
 import TrendingPage from './components/TrendingPage';
 import PortfolioPage from './components/PortfolioPage';
 import { PageType } from './types';
+import { SupabaseService } from './services/supabase';
+import { WalletService } from './services/wallet';
 
 function App() {
   const { connect, isConnected, connectorName, loading: connectLoading, error: connectError } = useWeb3AuthConnect();
@@ -18,12 +20,28 @@ function App() {
   const [defaultAmount, setDefaultAmount] = useState<number>(0.01);
   const [balanceLoading, setBalanceLoading] = useState(false);
 
-  // Fetch balance when account changes
+  // Initialize user and fetch balance when account changes
   useEffect(() => {
     if (connection && accounts && accounts.length > 0) {
+      initializeUser();
       fetchBalance();
     }
   }, [connection, accounts]);
+
+  const initializeUser = async () => {
+    if (accounts && accounts.length > 0) {
+      try {
+        // Initialize user in Supabase if not exists
+        await SupabaseService.getUser(accounts[0]);
+        
+        // Load user's default amount
+        const userDefaultAmount = await WalletService.getDefaultAmount(accounts[0]);
+        setDefaultAmount(userDefaultAmount);
+      } catch (error) {
+        console.error('Failed to initialize user:', error);
+      }
+    }
+  };
 
   const fetchBalance = async () => {
     if (connection && accounts && accounts.length > 0) {
@@ -108,6 +126,8 @@ function App() {
       currentPage={currentPage} 
       onPageChange={handlePageChange}
       isConnected={isConnected}
+      userAddress={accounts?.[0]}
+      onDisconnect={disconnect}
     >
       {/* User info and logout (hidden but accessible) */}
       <div className="hidden">

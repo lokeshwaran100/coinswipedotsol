@@ -1,4 +1,5 @@
 import { Token, Portfolio, Watchlist, Activity } from '../types';
+import { SupabaseService } from './supabase';
 
 // Mock portfolio data
 const MOCK_PORTFOLIO: Portfolio = {
@@ -38,29 +39,42 @@ const MOCK_WATCHLIST: Watchlist = {
 export class WalletService {
   // Get user portfolio
   static async getPortfolio(userAddress: string): Promise<Portfolio> {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return {
-      ...MOCK_PORTFOLIO,
-      user_address: userAddress
+    const portfolio = await SupabaseService.getPortfolio(userAddress);
+    return portfolio || {
+      user_address: userAddress,
+      tokens: [],
+      updated_at: new Date().toISOString()
     };
   }
 
   // Get user watchlist
   static async getWatchlist(userAddress: string): Promise<Watchlist> {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    return {
-      ...MOCK_WATCHLIST,
-      user_address: userAddress
+    const watchlist = await SupabaseService.getWatchlist(userAddress);
+    return watchlist || {
+      user_address: userAddress,
+      tokens: [],
+      updated_at: new Date().toISOString()
     };
   }
 
   // Add token to watchlist
   static async addToWatchlist(userAddress: string, token: Token): Promise<boolean> {
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      // In real implementation, this would update Supabase
-      console.log(`Added ${token.symbol} to watchlist for ${userAddress}`);
-      return true;
+      const currentWatchlist = await SupabaseService.getWatchlist(userAddress);
+      if (!currentWatchlist) return false;
+
+      // Check if token is already in watchlist
+      const tokenExists = currentWatchlist.tokens.some(t => t.address === token.address);
+      if (tokenExists) return true;
+
+      // Add token to watchlist
+      const updatedWatchlist: Watchlist = {
+        ...currentWatchlist,
+        tokens: [...currentWatchlist.tokens, token],
+        updated_at: new Date().toISOString()
+      };
+
+      return await SupabaseService.updateWatchlist(updatedWatchlist);
     } catch (error) {
       console.error('Failed to add to watchlist:', error);
       return false;
@@ -70,10 +84,17 @@ export class WalletService {
   // Remove token from watchlist
   static async removeFromWatchlist(userAddress: string, tokenAddress: string): Promise<boolean> {
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      // In real implementation, this would update Supabase
-      console.log(`Removed token ${tokenAddress} from watchlist for ${userAddress}`);
-      return true;
+      const currentWatchlist = await SupabaseService.getWatchlist(userAddress);
+      if (!currentWatchlist) return false;
+
+      // Remove token from watchlist
+      const updatedWatchlist: Watchlist = {
+        ...currentWatchlist,
+        tokens: currentWatchlist.tokens.filter(t => t.address !== tokenAddress),
+        updated_at: new Date().toISOString()
+      };
+
+      return await SupabaseService.updateWatchlist(updatedWatchlist);
     } catch (error) {
       console.error('Failed to remove from watchlist:', error);
       return false;
@@ -90,10 +111,49 @@ export class WalletService {
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // In real implementation, this would:
-      // 1. Execute swap via Jupiter
-      // 2. Update portfolio in Supabase
-      // 3. Add activity record
+      // For MVP, we'll simulate a successful trade
+      // In real implementation, this would execute swap via Jupiter
+      
+      // Add activity record
+      const activity = {
+        user_address: userAddress,
+        token: token,
+        action: action,
+        amount: amount,
+        created_at: new Date().toISOString()
+      };
+      
+      await SupabaseService.addActivity(activity);
+      
+      // For BUY action, update portfolio (simplified)
+      if (action === 'BUY') {
+        const currentPortfolio = await SupabaseService.getPortfolio(userAddress);
+        if (currentPortfolio) {
+          // Calculate token amount based on price (simplified)
+          const tokenAmount = amount / token.price;
+          
+          // Check if token already exists in portfolio
+          const existingTokenIndex = currentPortfolio.tokens.findIndex(t => t.address === token.address);
+          
+          if (existingTokenIndex >= 0) {
+            // Update existing token
+            currentPortfolio.tokens[existingTokenIndex].amount = 
+              (currentPortfolio.tokens[existingTokenIndex].amount || 0) + tokenAmount;
+            currentPortfolio.tokens[existingTokenIndex].value_usd = 
+              (currentPortfolio.tokens[existingTokenIndex].value_usd || 0) + (tokenAmount * token.price);
+          } else {
+            // Add new token to portfolio
+            const portfolioToken: Token = {
+              ...token,
+              amount: tokenAmount,
+              value_usd: tokenAmount * token.price
+            };
+            currentPortfolio.tokens.push(portfolioToken);
+          }
+          
+          await SupabaseService.updatePortfolio(currentPortfolio);
+        }
+      }
       
       console.log(`${action} ${amount} SOL worth of ${token.symbol} for ${userAddress}`);
       return true;
@@ -105,18 +165,14 @@ export class WalletService {
 
   // Get user's default trade amount
   static async getDefaultAmount(userAddress: string): Promise<number> {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    // In real implementation, fetch from Supabase users table
-    return 0.01; // Default 0.01 SOL
+    const user = await SupabaseService.getUser(userAddress);
+    return user?.default_amount || 0.01;
   }
 
   // Update user's default trade amount
   static async updateDefaultAmount(userAddress: string, amount: number): Promise<boolean> {
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      // In real implementation, update Supabase users table
-      console.log(`Updated default amount to ${amount} SOL for ${userAddress}`);
-      return true;
+      return await SupabaseService.updateUserDefaultAmount(userAddress, amount);
     } catch (error) {
       console.error('Failed to update default amount:', error);
       return false;
