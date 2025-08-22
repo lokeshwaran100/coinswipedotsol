@@ -1,10 +1,11 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   // alias are only to be added when absolutely necessary, these modules are already present in the browser environment
   // resolve: {
   // alias: {

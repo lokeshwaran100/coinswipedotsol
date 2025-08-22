@@ -1,87 +1,144 @@
-import "./App.css";
-import { useWeb3AuthConnect, useWeb3AuthDisconnect, useWeb3AuthUser} from "@web3auth/modal/react";
-import { WALLET_CONNECTORS } from "@web3auth/modal";
+import React, { useState, useEffect } from 'react';
+import { useWeb3AuthConnect, useWeb3AuthDisconnect, useWeb3AuthUser } from "@web3auth/modal/react";
 import { useSolanaWallet } from "@web3auth/modal/react/solana";
-import { SignTransaction } from "./components/signTransaction";
-import { Balance } from "./components/getBalance";
-import { SendVersionedTransaction } from "./components/sendVersionedTransaction";
-import { SignMessage } from "./components/signMessage";
-import { SwitchChain } from "./components/switchNetwork";
+import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
+import Layout from './components/Layout';
+import TrendingPage from './components/TrendingPage';
+import PortfolioPage from './components/PortfolioPage';
+import { PageType } from './types';
+
 function App() {
   const { connect, isConnected, connectorName, loading: connectLoading, error: connectError } = useWeb3AuthConnect();
   const { disconnect, loading: disconnectLoading, error: disconnectError } = useWeb3AuthDisconnect();
   const { userInfo } = useWeb3AuthUser();
-  const { accounts } = useSolanaWallet();
+  const { accounts, connection } = useSolanaWallet();
+  
+  const [currentPage, setCurrentPage] = useState<PageType>('trending');
+  const [balance, setBalance] = useState<number>(0);
+  const [defaultAmount, setDefaultAmount] = useState<number>(0.01);
+  const [balanceLoading, setBalanceLoading] = useState(false);
 
-  function uiConsole(...args: any[]): void {
-    const el = document.querySelector("#console>p");
-    if (el) {
-      el.innerHTML = JSON.stringify(args || {}, null, 2);
-      console.log(...args);
+  // Fetch balance when account changes
+  useEffect(() => {
+    if (connection && accounts && accounts.length > 0) {
+      fetchBalance();
     }
-  }
+  }, [connection, accounts]);
 
-  const loggedInView = (
-    <div className="grid">
-      <h2>Connected to {connectorName}</h2>
-      <div>{accounts?.[0]}</div>
-      <div className="flex-container"> 
-        <div>
-          <button onClick={() => uiConsole(userInfo)} className="card">
-            Get User Info
-          </button>
+  const fetchBalance = async () => {
+    if (connection && accounts && accounts.length > 0) {
+      try {
+        setBalanceLoading(true);
+        const publicKey = new PublicKey(accounts[0]);
+        const balance = await connection.getBalance(publicKey);
+        setBalance(balance);
+      } catch (err) {
+        console.error('Failed to fetch balance:', err);
+      } finally {
+        setBalanceLoading(false);
+      }
+    }
+  };
+
+  const handlePageChange = (page: PageType) => {
+    setCurrentPage(page);
+  };
+
+  const handleDefaultAmountChange = (amount: number) => {
+    setDefaultAmount(amount);
+  };
+
+  // Login view
+  const loginView = (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="max-w-md w-full">
+        {/* Logo and branding */}
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-blue-700 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <span className="text-white font-bold text-3xl">C</span>
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">CoinSwipe</h1>
+          <p className="text-gray-400">
+            Discover and trade Solana tokens with simple swipes
+          </p>
         </div>
-        <div>
-          <button onClick={() => disconnect()} className="card">
-            Log Out
+
+        {/* Login card */}
+        <div className="card text-center">
+          <h2 className="text-xl font-bold mb-4">Get Started</h2>
+          <p className="text-gray-400 mb-6">
+            Connect your wallet to start exploring trending tokens
+          </p>
+          
+          <button 
+            onClick={() => connect()} 
+            disabled={connectLoading}
+            className="btn-primary w-full mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {connectLoading ? 'Connecting...' : 'Connect Wallet'}
           </button>
-          {disconnectLoading && <div className="loading">Disconnecting...</div>}
-          {disconnectError && <div className="error">{disconnectError.message}</div>}
+          
+          {connectError && (
+            <div className="text-red-400 text-sm mt-2">
+              {connectError.message}
+            </div>
+          )}
+        </div>
+
+        {/* Features */}
+        <div className="mt-8 grid grid-cols-2 gap-4 text-center">
+          <div className="card">
+            <div className="text-2xl mb-2">📈</div>
+            <p className="text-sm font-medium">Trending Tokens</p>
+            <p className="text-xs text-gray-400">Discover hot tokens</p>
+          </div>
+          <div className="card">
+            <div className="text-2xl mb-2">⚡</div>
+            <p className="text-sm font-medium">Instant Trading</p>
+            <p className="text-xs text-gray-400">Trade with a swipe</p>
+          </div>
         </div>
       </div>
-      <Balance />
-      <SignMessage />
-      <SignTransaction />
-      <SendVersionedTransaction />
-      <SwitchChain />
     </div>
   );
 
-  const unloggedInView = (
-    <div className="grid">
-      <button onClick={() => connect()} className="card">
-        Login
-      </button>
-      {connectLoading && <div className="loading">Connecting...</div>}
-      {connectError && <div className="error">{connectError.message}</div>}
-    </div>
-  );
-
-  return (
-    <div className="container">
-      <h1 className="title">
-        <a target="_blank" href="https://web3auth.io/docs/sdk/pnp/web/modal" rel="noreferrer">
-          Web3Auth{" "}
-        </a>
-        & React Modal Solana Quick Start
-      </h1>
-
-      {isConnected ? loggedInView : unloggedInView}
-      <div id="console" style={{ whiteSpace: "pre-line" }}>
-        <p style={{ whiteSpace: "pre-line" }}></p>
+  // Main app view
+  const appView = (
+    <Layout 
+      currentPage={currentPage} 
+      onPageChange={handlePageChange}
+      isConnected={isConnected}
+    >
+      {/* User info and logout (hidden but accessible) */}
+      <div className="hidden">
+        <div>Connected to: {connectorName}</div>
+        <div>Address: {accounts?.[0]}</div>
+        <button onClick={() => disconnect()}>
+          {disconnectLoading ? 'Disconnecting...' : 'Logout'}
+        </button>
+        {disconnectError && <div>{disconnectError.message}</div>}
       </div>
 
-      <footer className="footer">
-        <a
-          href="https://github.com/Web3Auth/web3auth-examples/tree/main/quick-starts/react-solana-quick-start"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Source code
-        </a>
-      </footer>
-    </div>
+      {/* Page content */}
+      {currentPage === 'trending' && (
+        <TrendingPage 
+          userAddress={accounts?.[0]}
+          defaultAmount={defaultAmount}
+        />
+      )}
+      
+      {currentPage === 'portfolio' && (
+        <PortfolioPage 
+          userAddress={accounts?.[0]}
+          balance={balance}
+          defaultAmount={defaultAmount}
+          onDefaultAmountChange={handleDefaultAmountChange}
+        />
+      )}
+    </Layout>
   );
+
+  return isConnected ? appView : loginView;
 }
 
 export default App;
