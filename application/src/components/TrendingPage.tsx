@@ -235,13 +235,13 @@ const TrendingPage: React.FC<TrendingPageProps> = ({ userAddress, defaultAmount 
                     {currentToken.market_cap && (
                       <div className="text-center">
                         <p className="text-gray-400 text-sm">Market Cap</p>
-                        <p className="font-semibold">{currentToken.market_cap}</p>
+                        <p className="font-semibold">{TokenService.formatMarketCap(currentToken.market_cap)}</p>
                       </div>
                     )}
                     {currentToken.volume_24h && (
                       <div className="text-center">
                         <p className="text-gray-400 text-sm">24h Volume</p>
-                        <p className="font-semibold">{currentToken.volume_24h}</p>
+                        <p className="font-semibold">{TokenService.formatVolume(currentToken.volume_24h)}</p>
                       </div>
                     )}
                   </div>

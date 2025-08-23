@@ -8,8 +8,11 @@ export interface Token {
   amount?: number; // Required in portfolio
   value_usd?: number; // Required in portfolio
   change_24h?: number; // For trending view
-  market_cap?: string;
-  volume_24h?: string;
+  market_cap?: string | number;
+  volume_24h?: string | number;
+  liquidity?: number; // From DexScreener
+  createdAt?: string; // From DexScreener
+  url?: string; // DexScreener URL
 }
 
 // User data structure
