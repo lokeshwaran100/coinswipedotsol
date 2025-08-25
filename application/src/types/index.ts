@@ -45,6 +45,7 @@ export interface Activity {
   action: 'BUY' | 'SELL';
   amount: number;
   created_at: string;
+  transaction_id?: string;
 }
 
 // Navigation types

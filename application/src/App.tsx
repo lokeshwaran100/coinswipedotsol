@@ -17,7 +17,7 @@ function App() {
   
   const [currentPage, setCurrentPage] = useState<PageType>('trending');
   const [balance, setBalance] = useState<number>(0);
-  const [defaultAmount, setDefaultAmount] = useState<number>(0.01);
+  const [defaultAmount, setDefaultAmount] = useState<number>(0.001);
   const [balanceLoading, setBalanceLoading] = useState(false);
 
   // Initialize user and fetch balance when account changes

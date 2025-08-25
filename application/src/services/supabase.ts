@@ -17,7 +17,7 @@ export class SupabaseService {
           {
             address,
             email,
-            default_amount: 0.01,
+            default_amount: 0.001,
             created_at: new Date().toISOString()
           }
         ])

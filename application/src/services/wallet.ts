@@ -1,5 +1,6 @@
 import { Token, Portfolio, Watchlist, Activity } from '../types';
 import { SupabaseService } from './supabase';
+import { Connection, PublicKey, VersionedTransaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 // Mock portfolio data
 const MOCK_PORTFOLIO: Portfolio = {
@@ -35,8 +36,119 @@ const MOCK_WATCHLIST: Watchlist = {
   updated_at: new Date().toISOString()
 };
 
+// Jupiter API configuration
+const JUPITER_QUOTE_API_URL = 'https://lite-api.jup.ag/swap/v1/quote';
+const JUPITER_SWAP_API_URL = 'https://lite-api.jup.ag/swap/v1/swap';
+
+// SOL mint address
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+
+// Jupiter API interfaces
+interface JupiterQuoteResponse {
+  inputMint: string;
+  inAmount: string;
+  outputMint: string;
+  outAmount: string;
+  otherAmountThreshold: string;
+  swapMode: string;
+  slippageBps: number;
+  platformFee: null | any;
+  priceImpactPct: string;
+  routePlan: any[];
+  contextSlot: number;
+  timeTaken: number;
+}
+
+interface JupiterSwapResponse {
+  swapTransaction: string;
+  lastValidBlockHeight: number;
+  prioritizationFeeLamports: number;
+}
+
 // Service class for wallet and portfolio operations
 export class WalletService {
+  // Get quote from Jupiter API
+  private static async getJupiterQuote(
+    inputMint: string,
+    outputMint: string,
+    amount: number, // in lamports for SOL
+    slippageBps: number = 50 // 0.5% slippage
+  ): Promise<JupiterQuoteResponse | null> {
+    try {
+      const params = new URLSearchParams({
+        inputMint,
+        outputMint,
+        amount: amount.toString(),
+        slippageBps: slippageBps.toString(),
+        restrictIntermediateTokens: 'true'
+      });
+
+      const response = await fetch(`${JUPITER_QUOTE_API_URL}?${params}`);
+      if (!response.ok) {
+        throw new Error(`Jupiter quote API error: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to get Jupiter quote:', error);
+      return null;
+    }
+  }
+
+  // Build swap transaction using Jupiter API
+  private static async buildJupiterSwapTransaction(
+    quoteResponse: JupiterQuoteResponse,
+    userPublicKey: string
+  ): Promise<JupiterSwapResponse | null> {
+    try {
+      const response = await fetch(JUPITER_SWAP_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quoteResponse,
+          userPublicKey,
+          wrapAndUnwrapSol: true,
+          useSharedAccounts: true,
+          feeAccount: undefined,
+          trackingAccount: undefined,
+          computeUnitPriceMicroLamports: undefined,
+          prioritizationFeeLamports: 'auto'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Jupiter swap API error: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to build Jupiter swap transaction:', error);
+      return null;
+    }
+  }
+
+  // Execute Jupiter swap transaction
+  private static async executeJupiterSwap(
+    swapTransaction: string,
+    wallet: { signAndSendTransaction: (transaction: VersionedTransaction) => Promise<string> }
+  ): Promise<string | null> {
+    try {
+      // Deserialize the transaction
+      const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+      const transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+
+      // Sign and send the transaction
+      const txid = await wallet.signAndSendTransaction(transaction);
+
+      return txid;
+    } catch (error) {
+      console.error('Failed to execute Jupiter swap:', error);
+      return null;
+    }
+  }
+
   // Get user portfolio
   static async getPortfolio(userAddress: string): Promise<Portfolio> {
     const portfolio = await SupabaseService.getPortfolio(userAddress);
@@ -101,52 +213,111 @@ export class WalletService {
     }
   }
 
-  // Execute trade (placeholder for Jupiter swap)
+  // Execute trade using Jupiter API for swaps
   static async executeTrade(
     userAddress: string, 
     token: Token, 
     amount: number, 
-    action: 'BUY' | 'SELL'
+    action: 'BUY' | 'SELL',
+    connection?: Connection,
+    wallet?: { signAndSendTransaction: (transaction: VersionedTransaction) => Promise<string> }
   ): Promise<boolean> {
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // For MVP, we'll simulate a successful trade
-      // In real implementation, this would execute swap via Jupiter
-      
+      let actualTokenAmount = 0;
+      let actualSolAmount = amount;
+      let transactionId: string | null = null;
+
+      // For BUY action, use Jupiter API to swap SOL to token
+      if (action === 'BUY' && connection && wallet) {
+        console.log(`Executing Jupiter swap: ${amount} SOL -> ${token.symbol}`);
+        
+        // Convert SOL amount to lamports
+        const solAmountLamports = Math.floor(amount * LAMPORTS_PER_SOL);
+        
+        // Get quote from Jupiter
+        const quote = await this.getJupiterQuote(
+          SOL_MINT, // input: SOL
+          token.address, // output: target token
+          solAmountLamports,
+          100 // 1% slippage
+        );
+
+        if (!quote) {
+          console.error('Failed to get quote from Jupiter');
+          return false;
+        }
+
+        console.log('Jupiter quote received:', {
+          inputAmount: quote.inAmount,
+          outputAmount: quote.outAmount,
+          priceImpact: quote.priceImpactPct
+        });
+
+        // Build swap transaction
+        const swapResponse = await this.buildJupiterSwapTransaction(quote, userAddress);
+        if (!swapResponse) {
+          console.error('Failed to build swap transaction');
+          return false;
+        }
+
+        // Execute the swap
+        transactionId = await this.executeJupiterSwap(
+          swapResponse.swapTransaction,
+          wallet
+        );
+
+        if (!transactionId) {
+          console.error('Failed to execute swap transaction');
+          return false;
+        }
+
+        console.log('Swap executed successfully:', transactionId);
+        
+        // Calculate actual token amount received from the quote
+        actualTokenAmount = parseInt(quote.outAmount) / Math.pow(10, 6); // Assuming 6 decimals for most tokens
+        
+      } else if (action === 'SELL') {
+        // For SELL action, simulate for now (can be implemented later)
+        console.log('SELL action not yet implemented with Jupiter - using simulation');
+        actualTokenAmount = amount / token.price;
+      } else {
+        // Fallback simulation for BUY when connection/wallet not provided
+        console.log('Using simulated trade (missing connection or wallet)');
+        actualTokenAmount = amount / token.price;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
       // Add activity record
       const activity = {
         user_address: userAddress,
         token: token,
         action: action,
-        amount: amount,
-        created_at: new Date().toISOString()
+        amount: actualSolAmount,
+        created_at: new Date().toISOString(),
+        transaction_id: transactionId || undefined
       };
       
       await SupabaseService.addActivity(activity);
       
-      // For BUY action, update portfolio (simplified)
+      // For BUY action, update portfolio
       if (action === 'BUY') {
         const currentPortfolio = await SupabaseService.getPortfolio(userAddress);
         if (currentPortfolio) {
-          // Calculate token amount based on price (simplified)
-          const tokenAmount = amount / token.price;
-          
           // Check if token already exists in portfolio
           const existingTokenIndex = currentPortfolio.tokens.findIndex(t => t.address === token.address);
           
           if (existingTokenIndex >= 0) {
             // Update existing token
             currentPortfolio.tokens[existingTokenIndex].amount = 
-              (currentPortfolio.tokens[existingTokenIndex].amount || 0) + tokenAmount;
+              (currentPortfolio.tokens[existingTokenIndex].amount || 0) + actualTokenAmount;
             currentPortfolio.tokens[existingTokenIndex].value_usd = 
-              (currentPortfolio.tokens[existingTokenIndex].value_usd || 0) + (tokenAmount * token.price);
+              (currentPortfolio.tokens[existingTokenIndex].value_usd || 0) + (actualTokenAmount * token.price);
           } else {
             // Add new token to portfolio
             const portfolioToken: Token = {
               ...token,
-              amount: tokenAmount,
-              value_usd: tokenAmount * token.price
+              amount: actualTokenAmount,
+              value_usd: actualTokenAmount * token.price
             };
             currentPortfolio.tokens.push(portfolioToken);
           }
@@ -155,7 +326,11 @@ export class WalletService {
         }
       }
       
-      console.log(`${action} ${amount} SOL worth of ${token.symbol} for ${userAddress}`);
+      console.log(`${action} completed: ${actualSolAmount} SOL -> ${actualTokenAmount} ${token.symbol} for ${userAddress}`);
+      if (transactionId) {
+        console.log(`Transaction ID: ${transactionId}`);
+      }
+      
       return true;
     } catch (error) {
       console.error('Trade failed:', error);
@@ -166,7 +341,7 @@ export class WalletService {
   // Get user's default trade amount
   static async getDefaultAmount(userAddress: string): Promise<number> {
     const user = await SupabaseService.getUser(userAddress);
-    return user?.default_amount || 0.01;
+    return user?.default_amount || 0.001;
   }
 
   // Update user's default trade amount

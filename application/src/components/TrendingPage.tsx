@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { Star, Copy, ArrowLeft, ArrowRight } from 'lucide-react';
+import { useSolanaWallet, useSignAndSendTransaction } from '@web3auth/modal/react/solana';
 import { Token } from '../types';
 import { TokenService } from '../services/tokens';
 import { WalletService } from '../services/wallet';
@@ -11,6 +12,8 @@ interface TrendingPageProps {
 }
 
 const TrendingPage: React.FC<TrendingPageProps> = ({ userAddress, defaultAmount }) => {
+  const { connection } = useSolanaWallet();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
   const [tokens, setTokens] = useState<Token[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -44,7 +47,9 @@ const TrendingPage: React.FC<TrendingPageProps> = ({ userAddress, defaultAmount 
           userAddress,
           currentToken,
           defaultAmount,
-          'BUY'
+          'BUY',
+          connection || undefined,
+          { signAndSendTransaction }
         );
         if (success) {
           // Show success feedback

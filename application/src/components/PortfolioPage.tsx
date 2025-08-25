@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Edit2, TrendingUp, X } from 'lucide-react';
+import { useSolanaWallet, useSignAndSendTransaction } from '@web3auth/modal/react/solana';
 import { Token, Portfolio, Watchlist } from '../types';
 import { WalletService } from '../services/wallet';
 import { TokenService } from '../services/tokens';
@@ -19,6 +20,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
   defaultAmount, 
   onDefaultAmountChange 
 }) => {
+  const { connection } = useSolanaWallet();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [watchlist, setWatchlist] = useState<Watchlist | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,7 +69,14 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
     if (!userAddress) return;
     
     try {
-      await WalletService.executeTrade(userAddress, token, defaultAmount, 'BUY');
+      await WalletService.executeTrade(
+        userAddress, 
+        token, 
+        defaultAmount, 
+        'BUY',
+        connection || undefined,
+        { signAndSendTransaction }
+      );
       // Refresh portfolio data
       await loadPortfolioData();
     } catch (error) {
@@ -140,8 +150,8 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
                   type="number"
                   value={newAmount}
                   onChange={(e) => setNewAmount(e.target.value)}
-                  step="0.01"
-                  min="0.01"
+                  step="0.001"
+                  min="0.001"
                   className="w-20 px-2 py-1 bg-secondary border border-gray-600 rounded-lg text-white text-center"
                 />
                 <span className="text-gray-400">SOL</span>
