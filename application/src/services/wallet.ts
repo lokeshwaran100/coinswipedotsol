@@ -276,10 +276,63 @@ export class WalletService {
         // Calculate actual token amount received from the quote
         actualTokenAmount = parseInt(quote.outAmount) / Math.pow(10, 6); // Assuming 6 decimals for most tokens
         
+      } else if (action === 'SELL' && connection && wallet) {
+        console.log(`Executing Jupiter swap: ${amount} ${token.symbol} -> SOL`);
+        
+        // For SELL, amount is in token units, need to convert to token's smallest unit
+        // Assuming 6 decimals for most tokens (adjust as needed)
+        const tokenDecimals = 6;
+        const tokenAmountLamports = Math.floor(amount * Math.pow(10, tokenDecimals));
+        
+        // Get quote from Jupiter (swap token to SOL)
+        const quote = await this.getJupiterQuote(
+          token.address, // input: token to sell
+          SOL_MINT, // output: SOL
+          tokenAmountLamports,
+          100 // 1% slippage
+        );
+
+        if (!quote) {
+          console.error('Failed to get quote from Jupiter for SELL');
+          return false;
+        }
+
+        console.log('Jupiter SELL quote received:', {
+          inputAmount: quote.inAmount,
+          outputAmount: quote.outAmount,
+          priceImpact: quote.priceImpactPct
+        });
+
+        // Build swap transaction
+        const swapResponse = await this.buildJupiterSwapTransaction(quote, userAddress);
+        if (!swapResponse) {
+          console.error('Failed to build swap transaction for SELL');
+          return false;
+        }
+
+        // Execute the swap
+        transactionId = await this.executeJupiterSwap(
+          swapResponse.swapTransaction,
+          wallet
+        );
+
+        if (!transactionId) {
+          console.error('Failed to execute SELL swap transaction');
+          return false;
+        }
+
+        console.log('SELL swap executed successfully:', transactionId);
+        
+        // Calculate actual SOL amount received from the quote
+        actualSolAmount = parseInt(quote.outAmount) / LAMPORTS_PER_SOL;
+        actualTokenAmount = amount; // Amount of tokens sold
+        
       } else if (action === 'SELL') {
-        // For SELL action, simulate for now (can be implemented later)
-        console.log('SELL action not yet implemented with Jupiter - using simulation');
-        actualTokenAmount = amount / token.price;
+        // Fallback simulation for SELL when connection/wallet not provided
+        console.log('Using simulated SELL trade (missing connection or wallet)');
+        actualTokenAmount = amount;
+        actualSolAmount = amount * token.price / 89.42; // Rough SOL price estimate
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } else {
         // Fallback simulation for BUY when connection/wallet not provided
         console.log('Using simulated trade (missing connection or wallet)');
@@ -292,20 +345,19 @@ export class WalletService {
         user_address: userAddress,
         token: token,
         action: action,
-        amount: actualSolAmount,
+        amount: action === 'BUY' ? actualSolAmount : actualTokenAmount,
         created_at: new Date().toISOString(),
         transaction_id: transactionId || undefined
       };
       
       await SupabaseService.addActivity(activity);
       
-      // For BUY action, update portfolio
-      if (action === 'BUY') {
-        const currentPortfolio = await SupabaseService.getPortfolio(userAddress);
-        if (currentPortfolio) {
-          // Check if token already exists in portfolio
-          const existingTokenIndex = currentPortfolio.tokens.findIndex(t => t.address === token.address);
-          
+      // Update portfolio based on action
+      const currentPortfolio = await SupabaseService.getPortfolio(userAddress);
+      if (currentPortfolio) {
+        const existingTokenIndex = currentPortfolio.tokens.findIndex(t => t.address === token.address);
+        
+        if (action === 'BUY') {
           if (existingTokenIndex >= 0) {
             // Update existing token
             currentPortfolio.tokens[existingTokenIndex].amount = 
@@ -321,12 +373,28 @@ export class WalletService {
             };
             currentPortfolio.tokens.push(portfolioToken);
           }
+        } else if (action === 'SELL' && existingTokenIndex >= 0) {
+          // For SELL action, reduce token amount
+          const currentAmount = currentPortfolio.tokens[existingTokenIndex].amount || 0;
+          const newAmount = Math.max(0, currentAmount - actualTokenAmount);
           
-          await SupabaseService.updatePortfolio(currentPortfolio);
+          if (newAmount <= 0.000001) { // Remove token if amount is negligible
+            currentPortfolio.tokens.splice(existingTokenIndex, 1);
+          } else {
+            currentPortfolio.tokens[existingTokenIndex].amount = newAmount;
+            currentPortfolio.tokens[existingTokenIndex].value_usd = newAmount * token.price;
+          }
         }
+        
+        currentPortfolio.updated_at = new Date().toISOString();
+        await SupabaseService.updatePortfolio(currentPortfolio);
       }
       
-      console.log(`${action} completed: ${actualSolAmount} SOL -> ${actualTokenAmount} ${token.symbol} for ${userAddress}`);
+      if (action === 'BUY') {
+        console.log(`${action} completed: ${actualSolAmount} SOL -> ${actualTokenAmount} ${token.symbol} for ${userAddress}`);
+      } else {
+        console.log(`${action} completed: ${actualTokenAmount} ${token.symbol} -> ${actualSolAmount} SOL for ${userAddress}`);
+      }
       if (transactionId) {
         console.log(`Transaction ID: ${transactionId}`);
       }

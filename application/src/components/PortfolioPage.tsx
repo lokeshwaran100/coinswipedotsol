@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Edit2, TrendingUp, X } from 'lucide-react';
+import { Edit2, TrendingUp, X, DollarSign } from 'lucide-react';
 import { useSolanaWallet, useSignAndSendTransaction } from '@web3auth/modal/react/solana';
 import { Token, Portfolio, Watchlist } from '../types';
 import { WalletService } from '../services/wallet';
@@ -27,6 +27,18 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
   const [loading, setLoading] = useState(true);
   const [editingAmount, setEditingAmount] = useState(false);
   const [newAmount, setNewAmount] = useState(defaultAmount.toString());
+  const [sellDialog, setSellDialog] = useState<{
+    isOpen: boolean;
+    token: Token | null;
+    amount: string;
+    isAmountInTokens: boolean;
+  }>({
+    isOpen: false,
+    token: null,
+    amount: '',
+    isAmountInTokens: true
+  });
+  const [sellLoading, setSellLoading] = useState(false);
 
   useEffect(() => {
     if (userAddress) {
@@ -97,6 +109,62 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
         console.error('Failed to update default amount:', error);
       }
     }
+  };
+
+  const handleSellToken = (token: Token) => {
+    setSellDialog({
+      isOpen: true,
+      token,
+      amount: (token.amount || 0).toString(),
+      isAmountInTokens: true
+    });
+  };
+
+  const handleSellConfirm = async () => {
+    if (!userAddress || !sellDialog.token) return;
+    
+    setSellLoading(true);
+    try {
+      const amount = parseFloat(sellDialog.amount);
+      if (isNaN(amount) || amount <= 0) {
+        alert('Please enter a valid amount');
+        return;
+      }
+
+      // Check if user has enough tokens
+      const userTokenAmount = sellDialog.token.amount || 0;
+      if (sellDialog.isAmountInTokens && amount > userTokenAmount) {
+        alert(`Insufficient balance. You have ${WalletService.formatBalance(userTokenAmount, 6)} ${sellDialog.token.symbol}`);
+        return;
+      }
+
+      const success = await WalletService.executeTrade(
+        userAddress,
+        sellDialog.token,
+        amount,
+        'SELL',
+        connection || undefined,
+        { signAndSendTransaction }
+      );
+
+      if (success) {
+        // Refresh portfolio data
+        await loadPortfolioData();
+        setSellDialog({ isOpen: false, token: null, amount: '', isAmountInTokens: true });
+        alert('Sell order completed successfully!');
+      } else {
+        alert('Sell order failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to execute sell order:', error);
+      alert('Sell order failed. Please try again.');
+    } finally {
+      setSellLoading(false);
+    }
+  };
+
+  const closeSellDialog = () => {
+    setSellDialog({ isOpen: false, token: null, amount: '', isAmountInTokens: true });
   };
 
   const portfolioValue = portfolio ? WalletService.calculatePortfolioValue(portfolio) : 0;
@@ -258,6 +326,13 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
                       {TokenService.formatPercentageChange(token.change_24h)}
                     </p>
                   )}
+                  <button
+                    onClick={() => handleSellToken(token)}
+                    className="mt-2 text-xs px-3 py-1 bg-red-600 hover:bg-red-500 rounded transition-colors flex items-center space-x-1"
+                  >
+                    <DollarSign className="w-3 h-3" />
+                    <span>Sell</span>
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -346,6 +421,138 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
           )}
         </div>
       </div>
+
+      {/* Sell Dialog */}
+      {sellDialog.isOpen && sellDialog.token && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-secondary rounded-lg p-6 w-full max-w-md mx-4"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold">Sell {sellDialog.token.symbol}</h3>
+              <button
+                onClick={closeSellDialog}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center overflow-hidden">
+                  <img 
+                    src={sellDialog.token.logo} 
+                    alt={sellDialog.token.name}
+                    className="w-8 h-8 object-contain"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      target.parentElement!.innerHTML = `<span class="text-sm font-bold">${sellDialog.token?.symbol[0]}</span>`;
+                    }}
+                  />
+                </div>
+                <div>
+                  <p className="font-medium">{sellDialog.token.name}</p>
+                  <p className="text-gray-400 text-sm">
+                    Available: {WalletService.formatBalance(sellDialog.token.amount || 0, 6)} {sellDialog.token.symbol}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Amount to sell
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      value={sellDialog.amount}
+                      onChange={(e) => setSellDialog(prev => ({ ...prev, amount: e.target.value }))}
+                      step="0.000001"
+                      min="0"
+                      max={sellDialog.token.amount || 0}
+                      className="flex-1 px-3 py-2 bg-primary border border-gray-600 rounded-lg text-white"
+                      placeholder="0.000000"
+                    />
+                    <span className="text-gray-400 min-w-fit">{sellDialog.token.symbol}</span>
+                  </div>
+                  <div className="mt-2 flex justify-between text-xs text-gray-400">
+                    <button
+                      onClick={() => setSellDialog(prev => ({ 
+                        ...prev, 
+                        amount: ((prev.token?.amount || 0) * 0.25).toString() 
+                      }))}
+                      className="hover:text-white"
+                    >
+                      25%
+                    </button>
+                    <button
+                      onClick={() => setSellDialog(prev => ({ 
+                        ...prev, 
+                        amount: ((prev.token?.amount || 0) * 0.5).toString() 
+                      }))}
+                      className="hover:text-white"
+                    >
+                      50%
+                    </button>
+                    <button
+                      onClick={() => setSellDialog(prev => ({ 
+                        ...prev, 
+                        amount: ((prev.token?.amount || 0) * 0.75).toString() 
+                      }))}
+                      className="hover:text-white"
+                    >
+                      75%
+                    </button>
+                    <button
+                      onClick={() => setSellDialog(prev => ({ 
+                        ...prev, 
+                        amount: (prev.token?.amount || 0).toString() 
+                      }))}
+                      className="hover:text-white"
+                    >
+                      Max
+                    </button>
+                  </div>
+                </div>
+
+                {sellDialog.amount && !isNaN(parseFloat(sellDialog.amount)) && (
+                  <div className="bg-primary rounded-lg p-3">
+                    <p className="text-sm text-gray-400">Estimated SOL received:</p>
+                    <p className="font-medium">
+                      ~{WalletService.formatBalance(parseFloat(sellDialog.amount) * sellDialog.token.price / 89.42)} SOL
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      ~${(parseFloat(sellDialog.amount) * sellDialog.token.price).toFixed(2)} USD
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={closeSellDialog}
+                className="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                disabled={sellLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSellConfirm}
+                disabled={sellLoading || !sellDialog.amount || parseFloat(sellDialog.amount) <= 0}
+                className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                {sellLoading ? 'Selling...' : 'Confirm Sell'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
