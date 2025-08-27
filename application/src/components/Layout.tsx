@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, Briefcase, Wallet, LogOut, Copy, User } from 'lucide-react';
 import { PageType } from '../types';
+import Logo from '../assets/CoinSwipe_Logo.png';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -39,9 +40,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageChange, is
           <div className="flex items-center justify-between">
             {/* Logo */}
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-blue-700 rounded-2xl flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
+              <img src={Logo} alt="CoinSwipe logo" className="w-10 h-10 rounded-2xl object-contain" />
               <h1 className="text-xl font-bold text-white">CoinSwipe</h1>
             </div>
 
@@ -144,9 +143,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageChange, is
       <header className="md:hidden bg-secondary border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-blue-700 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold">C</span>
-            </div>
+            <img src={Logo} alt="CoinSwipe logo" className="w-8 h-8 rounded-lg object-contain" />
             <h1 className="text-lg font-bold text-white">CoinSwipe</h1>
           </div>
 

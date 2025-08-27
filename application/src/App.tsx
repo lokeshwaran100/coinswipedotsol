@@ -8,6 +8,7 @@ import PortfolioPage from './components/PortfolioPage';
 import { PageType } from './types';
 import { SupabaseService } from './services/supabase';
 import { WalletService } from './services/wallet';
+import Logo from './assets/CoinSwipe_Logo.png';
 
 function App() {
   const { connect, isConnected, connectorName, loading: connectLoading, error: connectError } = useWeb3AuthConnect();
@@ -72,9 +73,7 @@ function App() {
       <div className="max-w-md w-full">
         {/* Logo and branding */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-blue-700 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <span className="text-white font-bold text-3xl">C</span>
-          </div>
+          <img src={Logo} alt="CoinSwipe logo" className="w-20 h-20 rounded-3xl mx-auto mb-6 object-contain" />
           <h1 className="text-3xl font-bold text-white mb-2">CoinSwipe</h1>
           <p className="text-gray-400">
             Discover and trade Solana tokens with simple swipes
