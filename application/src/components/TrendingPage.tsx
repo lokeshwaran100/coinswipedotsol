@@ -5,6 +5,7 @@ import { useSolanaWallet, useSignAndSendTransaction } from '@web3auth/modal/reac
 import { Token } from '../types';
 import { TokenService } from '../services/tokens';
 import { WalletService } from '../services/wallet';
+import toast from 'react-hot-toast';
 
 interface TrendingPageProps {
   userAddress?: string;
@@ -43,7 +44,7 @@ const TrendingPage: React.FC<TrendingPageProps> = ({ userAddress, defaultAmount 
       // Buy token
       setIsTrading(true);
       try {
-        const success = await WalletService.executeTrade(
+        const result = await WalletService.executeTrade(
           userAddress,
           currentToken,
           defaultAmount,
@@ -51,12 +52,43 @@ const TrendingPage: React.FC<TrendingPageProps> = ({ userAddress, defaultAmount 
           connection || undefined,
           { signAndSendTransaction }
         );
-        if (success) {
-          // Show success feedback
-          console.log(`Successfully bought ${defaultAmount} SOL worth of ${currentToken.symbol}`);
+        
+        if (result.success) {
+          // Show success toast with transaction link
+          if (result.transactionId) {
+            toast.success(
+              <div className="flex flex-col gap-1">
+                <div className="font-medium">Purchase Successful!</div>
+                <div className="text-sm opacity-90">
+                  Bought {defaultAmount} SOL worth of {currentToken.symbol}
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const explorerUrl = `https://solscan.io/tx/${result.transactionId}`;
+                    toast.dismiss();
+                    setTimeout(() => {
+                      window.location.assign(explorerUrl);
+                    }, 100);
+                  }}
+                  className="text-xs underline hover:no-underline mt-1 text-left"
+                >
+                  View Transaction →
+                </button>
+              </div>,
+              { duration: 6000 }
+            );
+          } else {
+            toast.success(`Successfully bought ${defaultAmount} SOL worth of ${currentToken.symbol}`);
+          }
+        } else {
+          // Show error toast
+          toast.error(result.error || 'Transaction failed. Please try again.');
         }
       } catch (error) {
         console.error('Trade failed:', error);
+        toast.error('Transaction failed. Please try again.');
       } finally {
         setIsTrading(false);
       }

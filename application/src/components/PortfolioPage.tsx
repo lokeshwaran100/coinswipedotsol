@@ -6,6 +6,7 @@ import { Token, Portfolio, Watchlist } from '../types';
 import { WalletService } from '../services/wallet';
 import { TokenService } from '../services/tokens';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import toast from 'react-hot-toast';
 
 interface PortfolioPageProps {
   userAddress?: string;
@@ -81,7 +82,7 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
     if (!userAddress) return;
     
     try {
-      await WalletService.executeTrade(
+      const result = await WalletService.executeTrade(
         userAddress, 
         token, 
         defaultAmount, 
@@ -89,10 +90,45 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
         connection || undefined,
         { signAndSendTransaction }
       );
-      // Refresh portfolio data
-      await loadPortfolioData();
+      
+      if (result.success) {
+        // Show success toast with transaction link
+        if (result.transactionId) {
+          toast.success(
+            <div className="flex flex-col gap-1">
+              <div className="font-medium">Purchase Successful!</div>
+              <div className="text-sm opacity-90">
+                Bought {defaultAmount} SOL worth of {token.symbol}
+              </div>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const explorerUrl = `https://solscan.io/tx/${result.transactionId}`;
+                  toast.dismiss();
+                  setTimeout(() => {
+                    window.location.assign(explorerUrl);
+                  }, 100);
+                }}
+                className="text-xs underline hover:no-underline mt-1 text-left"
+              >
+                View Transaction →
+              </button>
+            </div>,
+            { duration: 6000 }
+          );
+        } else {
+          toast.success(`Successfully bought ${defaultAmount} SOL worth of ${token.symbol}`);
+        }
+        // Refresh portfolio data
+        await loadPortfolioData();
+      } else {
+        // Show error toast
+        toast.error(result.error || 'Transaction failed. Please try again.');
+      }
     } catch (error) {
       console.error('Failed to execute trade:', error);
+      toast.error('Transaction failed. Please try again.');
     }
   };
 
@@ -127,18 +163,18 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
     try {
       const amount = parseFloat(sellDialog.amount);
       if (isNaN(amount) || amount <= 0) {
-        alert('Please enter a valid amount');
+        toast.error('Please enter a valid amount');
         return;
       }
 
       // Check if user has enough tokens
       const userTokenAmount = sellDialog.token.amount || 0;
       if (sellDialog.isAmountInTokens && amount > userTokenAmount) {
-        alert(`Insufficient balance. You have ${WalletService.formatBalance(userTokenAmount, 6)} ${sellDialog.token.symbol}`);
+        toast.error(`Insufficient balance. You have ${WalletService.formatBalance(userTokenAmount, 6)} ${sellDialog.token.symbol}`);
         return;
       }
 
-      const success = await WalletService.executeTrade(
+      const result = await WalletService.executeTrade(
         userAddress,
         sellDialog.token,
         amount,
@@ -147,17 +183,44 @@ const PortfolioPage: React.FC<PortfolioPageProps> = ({
         { signAndSendTransaction }
       );
 
-      if (success) {
+      if (result.success) {
+        // Show success toast with transaction link
+        if (result.transactionId) {
+          toast.success(
+            <div className="flex flex-col gap-1">
+              <div className="font-medium">Sale Successful!</div>
+              <div className="text-sm opacity-90">
+                Sold {amount} {sellDialog.token.symbol}
+              </div>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const explorerUrl = `https://solscan.io/tx/${result.transactionId}`;
+                  toast.dismiss();
+                  setTimeout(() => {
+                    window.location.assign(explorerUrl);
+                  }, 100);
+                }}
+                className="text-xs underline hover:no-underline mt-1 text-left"
+              >
+                View Transaction →
+              </button>
+            </div>,
+            { duration: 6000 }
+          );
+        } else {
+          toast.success('Sell order completed successfully!');
+        }
         // Refresh portfolio data
         await loadPortfolioData();
         setSellDialog({ isOpen: false, token: null, amount: '', isAmountInTokens: true });
-        alert('Sell order completed successfully!');
       } else {
-        alert('Sell order failed. Please try again.');
+        toast.error(result.error || 'Sell order failed. Please try again.');
       }
     } catch (error) {
       console.error('Failed to execute sell order:', error);
-      alert('Sell order failed. Please try again.');
+      toast.error('Sell order failed. Please try again.');
     } finally {
       setSellLoading(false);
     }

@@ -221,7 +221,7 @@ export class WalletService {
     action: 'BUY' | 'SELL',
     connection?: Connection,
     wallet?: { signAndSendTransaction: (transaction: VersionedTransaction) => Promise<string> }
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; transactionId?: string; error?: string }> {
     try {
       let actualTokenAmount = 0;
       let actualSolAmount = amount;
@@ -244,7 +244,7 @@ export class WalletService {
 
         if (!quote) {
           console.error('Failed to get quote from Jupiter');
-          return false;
+          return { success: false, error: 'Failed to get quote from Jupiter' };
         }
 
         console.log('Jupiter quote received:', {
@@ -257,7 +257,7 @@ export class WalletService {
         const swapResponse = await this.buildJupiterSwapTransaction(quote, userAddress);
         if (!swapResponse) {
           console.error('Failed to build swap transaction');
-          return false;
+          return { success: false, error: 'Failed to build swap transaction' };
         }
 
         // Execute the swap
@@ -268,7 +268,7 @@ export class WalletService {
 
         if (!transactionId) {
           console.error('Failed to execute swap transaction');
-          return false;
+          return { success: false, error: 'Failed to execute swap transaction' };
         }
 
         console.log('Swap executed successfully:', transactionId);
@@ -294,7 +294,7 @@ export class WalletService {
 
         if (!quote) {
           console.error('Failed to get quote from Jupiter for SELL');
-          return false;
+          return { success: false, error: 'Failed to get quote from Jupiter for SELL' };
         }
 
         console.log('Jupiter SELL quote received:', {
@@ -307,7 +307,7 @@ export class WalletService {
         const swapResponse = await this.buildJupiterSwapTransaction(quote, userAddress);
         if (!swapResponse) {
           console.error('Failed to build swap transaction for SELL');
-          return false;
+          return { success: false, error: 'Failed to build swap transaction for SELL' };
         }
 
         // Execute the swap
@@ -318,7 +318,7 @@ export class WalletService {
 
         if (!transactionId) {
           console.error('Failed to execute SELL swap transaction');
-          return false;
+          return { success: false, error: 'Failed to execute SELL swap transaction' };
         }
 
         console.log('SELL swap executed successfully:', transactionId);
@@ -399,10 +399,10 @@ export class WalletService {
         console.log(`Transaction ID: ${transactionId}`);
       }
       
-      return true;
+      return { success: true, transactionId: transactionId || undefined };
     } catch (error) {
       console.error('Trade failed:', error);
-      return false;
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
     }
   }
 
